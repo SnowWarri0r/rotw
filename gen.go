@@ -8,7 +8,7 @@ import (
 
 // Generator 按照一定的时间间隔生产数据，并将生成的数据传递给注册的回调函数
 //
-// 生成的数据也可通过 Get() 获取
+// 生成的数据也可通过 Get() 直接获取
 //
 // 通过 Stop() 停止生产数据，并 cancel 掉上下文，使用者可以自行处理上下文
 type Generator interface {
@@ -22,7 +22,7 @@ type Generator interface {
 	Stop()
 }
 
-// NewGenerator 创建 Generator
+// NewGenerator 创建 Generator，并启动定时器
 func NewGenerator(span time.Duration, genFn func() any) Generator {
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &generator{
@@ -147,6 +147,7 @@ func (g *generator) notify(val any) {
 // next 计算下一次触发的时间
 func (g *generator) next() time.Duration {
 	_, offset := nowFunc().Zone()
+	// Unix时间戳没有时区信息，所以需要手动加上时区偏移
 	localTs := time.Duration(nowFunc().Unix()+int64(offset)) * time.Second
 	ret := g.span - localTs%g.span
 	return ret

@@ -16,13 +16,13 @@ type RotateWriterOption struct {
 	// 最多保留多少个文件
 	KeepFiles int
 	// 分割文件名生成器
-	Rg RotateGenerator
+	Rig RotateInfoGenerator
 	// 检查文件是否打开的间隔时间
 	CheckSpan time.Duration
 }
 
 func (rw *RotateWriterOption) check() error {
-	if rw.Rg == nil {
+	if rw.Rig == nil {
 		return errors.New("rotate generator is nil")
 	}
 	return nil
@@ -58,7 +58,7 @@ func NewRotateWriter(opt *RotateWriterOption) (RotateWriter, error) {
 	}
 	if err := rw.init(); err != nil {
 		errClose := rw.Close()
-		_, _ = fmt.Fprintf(os.Stderr, "close rotate writer error: %v\n", errClose)
+		_, _ = fmt.Fprintf(os.Stderr, "close rotate writer error, err=%v\n", errClose)
 		return nil, err
 	}
 	return rw, nil
@@ -66,7 +66,7 @@ func NewRotateWriter(opt *RotateWriterOption) (RotateWriter, error) {
 
 func (r *rotateWriter) init() error {
 	opt := r.opt
-	rg := opt.Rg
+	rg := opt.Rig
 	// 检查文件是否打开
 	if err := r.check(rg.Get()); err != nil {
 		return err
@@ -75,7 +75,7 @@ func (r *rotateWriter) init() error {
 	rg.AddCallback(func(val rotateInfo) {
 		err := r.check(val)
 		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "check file error: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "check file error, err=%v\n", err)
 		}
 	})
 	// KeepFiles > 0 时，开启清理过期文件协程
@@ -100,10 +100,10 @@ func (r *rotateWriter) Write(p []byte) (n int, err error) {
 	return r.file.Write(p)
 }
 
-// Close 关闭文件
+// Close 关闭文件分割写入器
 func (r *rotateWriter) Close() error {
 	close(r.closed)
-	r.opt.Rg.Stop()
+	r.opt.Rig.Stop()
 	if r.file == nil {
 		return nil
 	}
@@ -112,10 +112,10 @@ func (r *rotateWriter) Close() error {
 
 // clean 清理过期文件
 func (r *rotateWriter) clean(ctx context.Context) {
-	info := r.opt.Rg.Get()
+	info := r.opt.Rig.Get()
 	files, err := getExpireFiles(info.RawPath, r.opt.KeepFiles)
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "get expire files error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "get expire files error, err=%v\n", err)
 		return
 	}
 	if len(files) == 0 {
@@ -133,7 +133,7 @@ func (r *rotateWriter) clean(ctx context.Context) {
 		now := nowFunc()
 		name := files[i]
 		if errRemove := os.Remove(name); errRemove != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "remove file %s error: %v\n", name, err)
+			_, _ = fmt.Fprintf(os.Stderr, "remove file %s error, err=%v\n", name, err)
 		}
 		cost := time.Since(now)
 		fmt.Printf("[%v] >>> remove file %s, cost: %v\n", nowFunc().Format(time.StampMicro), name, cost)
@@ -141,7 +141,7 @@ func (r *rotateWriter) clean(ctx context.Context) {
 	}
 }
 
-func (r *rotateWriter) doCheck(span time.Duration, rg RotateGenerator) {
+func (r *rotateWriter) doCheck(span time.Duration, rig RotateInfoGenerator) {
 	ticker := time.NewTicker(span)
 	defer ticker.Stop()
 	for {
@@ -149,20 +149,21 @@ func (r *rotateWriter) doCheck(span time.Duration, rg RotateGenerator) {
 		case <-r.closed:
 			return
 		case <-ticker.C:
-			if err := r.check(rg.Get()); err != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "check file error: %v\n", err)
+			if err := r.check(rig.Get()); err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "check file error, err=%v\n", err)
 			}
 		}
 	}
 }
 
-// check 检查文件是否存在，不存在则创建文件和目录, 文件存在则检查文件是否被修改过
+// check 检查文件是否存在，不存在则创建目录和文件, 文件存在则检查文件是否被修改过
 func (r *rotateWriter) check(info rotateInfo) error {
 	r.mux.Lock()
 	fileExists := r.isFileExists(info.RotatePath)
 	r.mux.Unlock()
 
 	if !fileExists {
+		// 文件不存在，则创建目录
 		dir := filepath.Dir(info.RotatePath)
 		if err := keepDirs(dir); err != nil {
 			return err
@@ -179,7 +180,7 @@ func (r *rotateWriter) check(info rotateInfo) error {
 	if r.file != nil {
 		_ = r.file.Close()
 	}
-	// 创建新文件
+	// 创建新文件/打开文件
 	file, err := os.OpenFile(info.RotatePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
@@ -203,7 +204,7 @@ func (r *rotateWriter) isFileExists(filename string) bool {
 		if os.IsNotExist(err) {
 			return false
 		}
-		_, _ = fmt.Fprintf(os.Stderr, "stat %s error: %v\n", filename, err)
+		_, _ = fmt.Fprintf(os.Stderr, "stat %s error, err=%v\n", filename, err)
 		return false
 	}
 	return os.SameFile(info, r.fileInfo)

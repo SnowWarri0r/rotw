@@ -64,7 +64,7 @@ func getExpireFiles(path string, keep int) ([]string, error) {
 			if os.IsNotExist(err) {
 				continue
 			}
-			_, _ = fmt.Fprintf(os.Stderr, "stat filelist fail, err=%v", err)
+			_, _ = fmt.Fprintf(os.Stderr, "stat file fail, err=%v", err)
 			continue
 		}
 		// 不是文件，跳过

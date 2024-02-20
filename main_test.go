@@ -13,7 +13,7 @@ func Test_main(t *testing.T) {
 	}
 	rwo := &RotateWriterOption{
 		KeepFiles: 2,
-		Rg:        rg,
+		Rig:       rg,
 		CheckSpan: time.Second,
 	}
 	rw, err := NewRotateWriter(rwo)

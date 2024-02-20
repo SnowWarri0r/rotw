@@ -14,27 +14,27 @@ type rotateInfo struct {
 	RotatePath string
 }
 
-// RotateGenerator 文件分割信息生成器
-type RotateGenerator interface {
+// RotateInfoGenerator 文件分割信息生成器
+type RotateInfoGenerator interface {
 	// Get 获取当前文件路径
 	Get() rotateInfo
 	// AddCallback 添加回调函数
-	AddCallback(func(info rotateInfo))
+	AddCallback(func(rotateInfo))
 	// AddCallbackWithCtx 添加回调函数，并传入生成器的上下文，用于用户控制中断任务
 	AddCallbackWithCtx(func(context.Context, rotateInfo))
 	// Stop 停止生成器，此操作会cancel生成器的上下文，并停止生成器
 	Stop()
 }
 
-type rotateGenerator struct {
-	p Generator
+type rotateInfoGenerator struct {
+	g Generator
 }
 
 // ErrInvalidRule 无效规则错误
 var ErrInvalidRule = errors.New("invalid rule")
 
 // NewRotateGenerator 创建文件分割信息生成器
-func NewRotateGenerator(rule string, filePath string) (RotateGenerator, error) {
+func NewRotateGenerator(rule string, filePath string) (RotateInfoGenerator, error) {
 	if r, ok := defaultRotateRule[rule]; ok {
 		fn := func() any {
 			return rotateInfo{
@@ -42,33 +42,33 @@ func NewRotateGenerator(rule string, filePath string) (RotateGenerator, error) {
 				RotatePath: filePath + r.SuffixFunc(),
 			}
 		}
-		return &rotateGenerator{
-			p: NewGenerator(r.Span, fn),
+		return &rotateInfoGenerator{
+			g: NewGenerator(r.Span, fn),
 		}, nil
 	}
 	return nil, ErrInvalidRule
 }
 
-func (r *rotateGenerator) Get() rotateInfo {
-	return r.p.Get().(rotateInfo)
+func (r *rotateInfoGenerator) Get() rotateInfo {
+	return r.g.Get().(rotateInfo)
 }
 
-func (r *rotateGenerator) AddCallback(fn func(rotateInfo)) {
+func (r *rotateInfoGenerator) AddCallback(fn func(rotateInfo)) {
 	f := func(val any) {
 		fn(val.(rotateInfo))
 	}
-	r.p.AddCallback(f)
+	r.g.AddCallback(f)
 }
 
-func (r *rotateGenerator) AddCallbackWithCtx(fn func(context.Context, rotateInfo)) {
+func (r *rotateInfoGenerator) AddCallbackWithCtx(fn func(context.Context, rotateInfo)) {
 	f := func(ctx context.Context, val any) {
 		fn(ctx, val.(rotateInfo))
 	}
-	r.p.AddCallbackWithCtx(f)
+	r.g.AddCallbackWithCtx(f)
 }
 
-func (r *rotateGenerator) Stop() {
-	r.p.Stop()
+func (r *rotateInfoGenerator) Stop() {
+	r.g.Stop()
 }
 
 type rotateRule struct {
