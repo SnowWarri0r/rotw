@@ -57,7 +57,8 @@ func NewRotateWriter(opt *RotateWriterOption) (RotateWriter, error) {
 		closed: make(chan struct{}),
 	}
 	if err := rw.init(); err != nil {
-		_ = rw.Close()
+		errClose := rw.Close()
+		_, _ = fmt.Fprintf(os.Stderr, "close rotate writer error: %v\n", errClose)
 		return nil, err
 	}
 	return rw, nil
@@ -72,7 +73,10 @@ func (r *rotateWriter) init() error {
 	}
 	// 添加回调，当文件信息变化时，检查文件是否打开
 	rg.AddCallback(func(val rotateInfo) {
-		_ = r.check(val)
+		err := r.check(val)
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "check file error: %v\n", err)
+		}
 	})
 	// KeepFiles > 0 时，开启清理过期文件协程
 	if opt.KeepFiles > 0 {
