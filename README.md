@@ -8,7 +8,7 @@ A file rotation writer which can write file split by time span
 - [x] Max Keep files
 - [x] Compatible with zapcore.WriteSyncer
 - [x] Customizable rotate rule
-- [x] Support Windows/Linux
+- [x] Support Windows/Linux/macOS
 - [ ] Customize file write strategy
 - [ ] ...
 
