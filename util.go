@@ -11,7 +11,7 @@ import (
 )
 
 var nowFunc = time.Now
-var suffixRegexp = regexp.MustCompile(`\.[\d_:-]+`)
+var suffixRegexp = regexp.MustCompile(`\.[\d_-]+`)
 
 // setNowFunc 设置当前时间函数，用于测试
 func setNowFunc(f func() time.Time) {
@@ -91,7 +91,7 @@ func getExpireFiles(path string, keep int) ([]string, error) {
 	return ret, nil
 }
 
-// isFilenameMatch 检查文件名是否满足前缀，且后缀格式为 \.[\d_:-]+ 的正则表达式
+// isFilenameMatch 检查文件名是否满足前缀，且后缀格式为 \.[\d_-]+ 的正则表达式
 func isFilenameMatch(prefix string, name string) bool {
 	if !strings.HasPrefix(name, prefix) {
 		return false
