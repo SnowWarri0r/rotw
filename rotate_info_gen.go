@@ -33,8 +33,8 @@ type rotateInfoGenerator struct {
 // ErrInvalidRule 无效规则错误
 var ErrInvalidRule = errors.New("invalid rule")
 
-// NewRotateGenerator 创建文件分割信息生成器
-func NewRotateGenerator(rule string, filePath string) (RotateInfoGenerator, error) {
+// NewRotateInfoGenerator 创建文件分割信息生成器
+func NewRotateInfoGenerator(rule string, filePath string) (RotateInfoGenerator, error) {
 	if r, ok := defaultRotateRule[rule]; ok {
 		fn := func() any {
 			return rotateInfo{

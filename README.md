@@ -24,7 +24,7 @@ import (
 
 func main() {
 	// create a rotate info generator
-	rg, err := rotw.NewRotateGenerator("1min", "log/abc.log")
+	rig, err := rotw.NewRotateInfoGenerator("1min", "log/abc.log")
 	if err != nil {
 		panic(err)
 	}
@@ -33,7 +33,7 @@ func main() {
 		// 2 files will be kept
 		KeepFiles: 2,
 		// rotate info generator
-		Rig:        rg,
+		Rig:        rig,
 		// check file opened every 1 second
 		CheckSpan: time.Second,
 	}

@@ -7,13 +7,13 @@ import (
 )
 
 func Test_main(t *testing.T) {
-	rg, err := NewRotateGenerator("1min", "log/abc.log")
+	rig, err := NewRotateInfoGenerator("1min", "log/abc.log")
 	if err != nil {
 		t.Fatalf(">> %v\n", err)
 	}
 	rwo := &RotateWriterOption{
 		KeepFiles: 2,
-		Rig:       rg,
+		Rig:       rig,
 		CheckSpan: time.Second,
 	}
 	rw, err := NewRotateWriter(rwo)
