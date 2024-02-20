@@ -4,6 +4,7 @@ A file rotation writer which can write file split by time span
 
 ## Features  
 - [x] Rotate by time span
+- [x] Multiple time span selection
 - [x] Max Keep files
 - [x] Compatible with zapcore.WriteSyncer
 - [x] Customizable rotate rule
