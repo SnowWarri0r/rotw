@@ -11,25 +11,27 @@ import (
 	"time"
 )
 
-// RotateWriterOption 文件分割写入器配置
-type RotateWriterOption struct {
-	// 最多保留多少个文件
+type Option func(*RotateWriterConfig)
+
+// RotateWriterConfig 文件分割写入器配置
+type RotateWriterConfig struct {
+	// 最多保留多少个文件, Optional, 默认0，即不删除文件
 	KeepFiles int
 	// 默认文件分割规则
 	//
 	// 1min, 5min, 10min, 30min, hour, day
 	//
-	// 可以使用 AddRotateRule 添加自定义规则
+	// 可以使用 AddRotateRule 添加自定义规则, Optional, 默认规则为 no
 	Rule string
 	// 文件路径: eg: xxx/xxx.log
 	LogPath string
-	// 检查文件是否打开的间隔时间
+	// 检查文件是否打开的间隔时间, Optional, 默认1s
 	CheckSpan time.Duration
 }
 
-func (rw *RotateWriterOption) check() error {
+func (rw *RotateWriterConfig) check() error {
 	if len(rw.Rule) == 0 {
-		return errors.New("rule is empty")
+		rw.Rule = "no"
 	}
 	if len(rw.LogPath) == 0 {
 		return errors.New("log path is empty")
@@ -46,7 +48,7 @@ type RotateWriter interface {
 }
 
 type rotateWriter struct {
-	opt *RotateWriterOption
+	cfg *RotateWriterConfig
 	// 当前文件信息
 	fileInfo os.FileInfo
 	// 文件分割信息生成器
@@ -58,21 +60,36 @@ type rotateWriter struct {
 	closed chan struct{}
 }
 
-// NewRotateWriter 创建文件分割写入器
-func NewRotateWriter(opt *RotateWriterOption) (RotateWriter, error) {
-	if opt == nil {
-		return nil, errors.New("option is nil")
+// NewRotateWriterWithOpt 创建文件分割写入器
+func NewRotateWriterWithOpt(logPath string, opts ...Option) (RotateWriter, error) {
+	cfg := &RotateWriterConfig{
+		LogPath: logPath,
 	}
-	if err := opt.check(); err != nil {
+	for _, opt := range opts {
+		opt(cfg)
+	}
+	rw, err := NewRotateWriter(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return rw, nil
+}
+
+// NewRotateWriter 创建文件分割写入器
+func NewRotateWriter(cfg *RotateWriterConfig) (RotateWriter, error) {
+	if cfg == nil {
+		return nil, errors.New("config is nil")
+	}
+	if err := cfg.check(); err != nil {
 		return nil, err
 	}
 	// 创建文件信息生成器
-	rig, errRig := NewRotateInfoGenerator(opt.Rule, opt.LogPath)
+	rig, errRig := NewRotateInfoGenerator(cfg.Rule, cfg.LogPath)
 	if errRig != nil {
 		return nil, errRig
 	}
 	rw := &rotateWriter{
-		opt:    opt,
+		cfg:    cfg,
 		rig:    rig,
 		closed: make(chan struct{}),
 	}
@@ -85,7 +102,7 @@ func NewRotateWriter(opt *RotateWriterOption) (RotateWriter, error) {
 }
 
 func (r *rotateWriter) init() error {
-	opt := r.opt
+	cfg := r.cfg
 	rig := r.rig
 	// 检查文件是否打开
 	if err := r.check(rig.Get()); err != nil {
@@ -99,7 +116,7 @@ func (r *rotateWriter) init() error {
 		}
 	})
 	// KeepFiles > 0 时，开启清理过期文件协程
-	if opt.KeepFiles > 0 {
+	if cfg.KeepFiles > 0 {
 		rig.AddCallbackWithCtx(func(ctx context.Context, val rotateInfo) {
 			r.clean(ctx)
 		})
@@ -107,8 +124,8 @@ func (r *rotateWriter) init() error {
 		go r.clean(context.Background())
 	}
 	// CheckSpan > 0 时，开启检查文件是否打开的协程
-	if opt.CheckSpan > 0 {
-		go r.doCheck(opt.CheckSpan, rig)
+	if cfg.CheckSpan > 0 {
+		go r.doCheck(cfg.CheckSpan, rig)
 	}
 	return nil
 }
@@ -133,7 +150,7 @@ func (r *rotateWriter) Close() error {
 // clean 清理过期文件
 func (r *rotateWriter) clean(ctx context.Context) {
 	info := r.rig.Get()
-	files, err := getExpireFiles(info.RawPath, r.opt.KeepFiles)
+	files, err := getExpireFiles(info.RawPath, r.cfg.KeepFiles)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "get expire files error, err=%v\n", err)
 		return
@@ -231,4 +248,22 @@ func (r *rotateWriter) isFileExists(filename string) bool {
 		return false
 	}
 	return os.SameFile(info, r.fileInfo)
+}
+
+func WithKeepFiles(num int) Option {
+	return func(rw *RotateWriterConfig) {
+		rw.KeepFiles = num
+	}
+}
+
+func WithRule(rule string) Option {
+	return func(rw *RotateWriterConfig) {
+		rw.Rule = rule
+	}
+}
+
+func WithCheckSpan(span time.Duration) Option {
+	return func(rw *RotateWriterConfig) {
+		rw.CheckSpan = span
+	}
 }

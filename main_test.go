@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-func Test_main(t *testing.T) {
-	rwo := &RotateWriterOption{
+func Test_classic(t *testing.T) {
+	rwo := &RotateWriterConfig{
 		KeepFiles: 2,
 		LogPath:   "log/test.log",
 		Rule:      "1min",
@@ -25,6 +25,25 @@ func Test_main(t *testing.T) {
 		}
 		t.Logf("[%v] end write\n", nowFunc().Format(time.StampMicro))
 		time.Sleep(36*time.Second + time.Duration(rand.Intn(500))*time.Millisecond)
+	}
+	err = rw.Close()
+	if err != nil {
+		t.Fatalf(">> %v\n", err)
+	}
+}
+
+func Test_optional(t *testing.T) {
+	rw, err := NewRotateWriterWithOpt("log/test.log")
+	if err != nil {
+		t.Fatalf(">> %v\n", err)
+	}
+	for i := 0; i < 4; i++ {
+		t.Logf("[%v] begin write\n", nowFunc().Format(time.StampMicro))
+		for j := 0; j < 10000; j++ {
+			_, _ = rw.Write([]byte("hello world\n"))
+			//t.Logf(">> %v, %v\n", n, errWrite)
+		}
+		t.Logf("[%v] end write\n", nowFunc().Format(time.StampMicro))
 	}
 	err = rw.Close()
 	if err != nil {
