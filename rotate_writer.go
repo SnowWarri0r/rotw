@@ -15,15 +15,27 @@ import (
 type RotateWriterOption struct {
 	// 最多保留多少个文件
 	KeepFiles int
-	// 分割文件名生成器
-	Rig RotateInfoGenerator
+	// 默认文件分割规则
+	//
+	// 1min, 5min, 10min, 30min, hour, day
+	//
+	// 可以使用 AddRotateRule 添加自定义规则
+	Rule string
+	// 文件路径: eg: xxx/xxx.log
+	LogPath string
 	// 检查文件是否打开的间隔时间
 	CheckSpan time.Duration
 }
 
 func (rw *RotateWriterOption) check() error {
-	if rw.Rig == nil {
-		return errors.New("rotate generator is nil")
+	if len(rw.Rule) == 0 {
+		return errors.New("rule is empty")
+	}
+	if len(rw.LogPath) == 0 {
+		return errors.New("log path is empty")
+	}
+	if rw.CheckSpan <= 0 {
+		rw.CheckSpan = time.Second * 1
 	}
 	return nil
 }
@@ -37,6 +49,8 @@ type rotateWriter struct {
 	opt *RotateWriterOption
 	// 当前文件信息
 	fileInfo os.FileInfo
+	// 文件分割信息生成器
+	rig RotateInfoGenerator
 	// 当前文件
 	file *os.File
 	mux  sync.Mutex
@@ -52,8 +66,14 @@ func NewRotateWriter(opt *RotateWriterOption) (RotateWriter, error) {
 	if err := opt.check(); err != nil {
 		return nil, err
 	}
+	// 创建文件信息生成器
+	rig, errRig := NewRotateInfoGenerator(opt.Rule, opt.LogPath)
+	if errRig != nil {
+		return nil, errRig
+	}
 	rw := &rotateWriter{
 		opt:    opt,
+		rig:    rig,
 		closed: make(chan struct{}),
 	}
 	if err := rw.init(); err != nil {
@@ -66,13 +86,13 @@ func NewRotateWriter(opt *RotateWriterOption) (RotateWriter, error) {
 
 func (r *rotateWriter) init() error {
 	opt := r.opt
-	rg := opt.Rig
+	rig := r.rig
 	// 检查文件是否打开
-	if err := r.check(rg.Get()); err != nil {
+	if err := r.check(rig.Get()); err != nil {
 		return err
 	}
 	// 添加回调，当文件信息变化时，检查文件是否打开
-	rg.AddCallback(func(val rotateInfo) {
+	rig.AddCallback(func(val rotateInfo) {
 		err := r.check(val)
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "check file error, err=%v\n", err)
@@ -80,7 +100,7 @@ func (r *rotateWriter) init() error {
 	})
 	// KeepFiles > 0 时，开启清理过期文件协程
 	if opt.KeepFiles > 0 {
-		rg.AddCallbackWithCtx(func(ctx context.Context, val rotateInfo) {
+		rig.AddCallbackWithCtx(func(ctx context.Context, val rotateInfo) {
 			r.clean(ctx)
 		})
 		// 启动时清理过期文件
@@ -88,7 +108,7 @@ func (r *rotateWriter) init() error {
 	}
 	// CheckSpan > 0 时，开启检查文件是否打开的协程
 	if opt.CheckSpan > 0 {
-		go r.doCheck(opt.CheckSpan, rg)
+		go r.doCheck(opt.CheckSpan, rig)
 	}
 	return nil
 }
@@ -103,7 +123,7 @@ func (r *rotateWriter) Write(p []byte) (n int, err error) {
 // Close 关闭文件分割写入器
 func (r *rotateWriter) Close() error {
 	close(r.closed)
-	r.opt.Rig.Stop()
+	r.rig.Stop()
 	if r.file == nil {
 		return nil
 	}
@@ -112,7 +132,7 @@ func (r *rotateWriter) Close() error {
 
 // clean 清理过期文件
 func (r *rotateWriter) clean(ctx context.Context) {
-	info := r.opt.Rig.Get()
+	info := r.rig.Get()
 	files, err := getExpireFiles(info.RawPath, r.opt.KeepFiles)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "get expire files error, err=%v\n", err)
@@ -178,7 +198,10 @@ func (r *rotateWriter) check(info rotateInfo) error {
 	}
 	// 上一个文件描述符存在，则关闭
 	if r.file != nil {
-		_ = r.file.Close()
+		errClose := r.file.Close()
+		if errClose != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "close file %s error, err=%v\n", r.file.Name(), errClose)
+		}
 	}
 	// 创建新文件/打开文件
 	file, err := os.OpenFile(info.RotatePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)

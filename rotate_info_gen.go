@@ -77,14 +77,23 @@ type rotateRule struct {
 }
 
 // AddRotateRule 添加自定义时间分割规则
+//
 // 默认存在的规则：
+//
 // no: 不分割
-// 1min: 每分钟分割一次，文件名格式：2006-01-02_1504
+//
+// 1min: 每分钟分割一次，文件名格式：2006-01-02_1504'
+//
 // 5min: 每五分钟分割一次，文件名格式：2006-01-02_15xx
+//
 // 10min: 每十分钟分割一次，文件名格式：2006-01-02_15xx
+//
 // 15min: 每十五分钟分割一次，文件名格式：2006-01-02_15xx
+//
 // 30min: 每三十分钟分割一次，文件名格式：2006-01-02_15xx
+//
 // hour: 每小时分割一次，文件名格式：2006-01-02_15
+//
 // day: 每天分割一次，文件名格式：2006-01-02
 func AddRotateRule(name string, span time.Duration, fn func() string) error {
 	if _, ok := defaultRotateRule[name]; ok {

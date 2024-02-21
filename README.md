@@ -25,18 +25,15 @@ import (
 )
 
 func main() {
-	// create a rotate info generator
-	rig, err := rotw.NewRotateInfoGenerator("1min", "log/abc.log")
-	if err != nil {
-		panic(err)
-	}
-	// configure the rotate writer
+	// rotate writer configuration
 	rwo := &rotw.RotateWriterOption{
-		// 2 files will be kept
+		// max keep files
 		KeepFiles: 2,
-		// rotate info generator
-		Rig:        rig,
-		// check file opened every 1 second
+		// log file path
+		LogPath: "log/test.log",
+		// rotate rule
+		Rule: "1min",
+		// check file opened span
 		CheckSpan: time.Second,
 	}
 	// create a rotate writer
