@@ -25,5 +25,5 @@ jobs:
 
     - name: Test
       run: |
-        go test -coverprofile coverage.out -v ./...
+        go test -coverprofile coverage.out -bench . -race -v ./...
         go tool cover -func coverage.out
