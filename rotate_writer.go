@@ -1,6 +1,7 @@
 package rotw
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +13,30 @@ import (
 )
 
 type Option func(*RotateWriterConfig)
+
+func WithKeepFiles(num int) Option {
+	return func(rw *RotateWriterConfig) {
+		rw.KeepFiles = num
+	}
+}
+
+func WithRule(rule string) Option {
+	return func(rw *RotateWriterConfig) {
+		rw.Rule = rule
+	}
+}
+
+func WithCheckSpan(span time.Duration) Option {
+	return func(rw *RotateWriterConfig) {
+		rw.CheckSpan = span
+	}
+}
+
+func WithBufSize(sz int) Option {
+	return func(rw *RotateWriterConfig) {
+		rw.BufSize = sz
+	}
+}
 
 // RotateWriterConfig 文件分割写入器配置
 type RotateWriterConfig struct {
@@ -27,6 +52,8 @@ type RotateWriterConfig struct {
 	LogPath string
 	// 检查文件是否打开的间隔时间, Optional, 默认1s
 	CheckSpan time.Duration
+	// 写入缓冲区大小
+	BufSize int
 }
 
 func (rw *RotateWriterConfig) check() error {
@@ -38,6 +65,9 @@ func (rw *RotateWriterConfig) check() error {
 	}
 	if rw.CheckSpan <= 0 {
 		rw.CheckSpan = time.Second * 1
+	}
+	if rw.BufSize <= 0 {
+		rw.BufSize = 4096
 	}
 	return nil
 }
@@ -53,11 +83,13 @@ type rotateWriter struct {
 	fileInfo os.FileInfo
 	// 文件分割信息生成器
 	rig RotateInfoGenerator
-	// 当前文件
+	// 文件描述符
 	file *os.File
 	mux  sync.Mutex
 	// 关闭信号，用于通知检查文件是否打开的协程退出
 	closed chan struct{}
+	// 写入缓冲区
+	w *bufio.Writer
 }
 
 // NewRotateWriterWithOpt 创建文件分割写入器
@@ -134,17 +166,27 @@ func (r *rotateWriter) init() error {
 func (r *rotateWriter) Write(p []byte) (n int, err error) {
 	r.mux.Lock()
 	defer r.mux.Unlock()
-	return r.file.Write(p)
+	return r.w.Write(p)
 }
 
 // Close 关闭文件分割写入器
 func (r *rotateWriter) Close() error {
 	close(r.closed)
 	r.rig.Stop()
-	if r.file == nil {
+	if r.w == nil && r.file == nil {
 		return nil
 	}
-	return r.file.Close()
+	if r.w != nil {
+		errFlush := r.w.Flush()
+		// possibly lost buf content
+		if errFlush != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "flush buf error, err=%v\n", errFlush)
+		}
+	}
+	if r.file != nil {
+		return r.file.Close()
+	}
+	return nil
 }
 
 // clean 清理过期文件
@@ -170,7 +212,7 @@ func (r *rotateWriter) clean(ctx context.Context) {
 		now := nowFunc()
 		name := files[i]
 		if errRemove := os.Remove(name); errRemove != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "remove file %s error, err=%v\n", name, err)
+			_, _ = fmt.Fprintf(os.Stderr, "remove file %s error, err=%v\n", name, errRemove)
 		}
 		cost := time.Since(now)
 		fmt.Printf("[%v] >>> remove file %s, cost: %v\n", nowFunc().Format(time.StampMicro), name, cost)
@@ -215,6 +257,12 @@ func (r *rotateWriter) check(info rotateInfo) error {
 	}
 	// 上一个文件描述符存在，则关闭
 	if r.file != nil {
+		if r.w != nil {
+			errFlush := r.w.Flush()
+			if errFlush != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "flush buf error, err=%v\n", errFlush)
+			}
+		}
 		errClose := r.file.Close()
 		if errClose != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "close file %s error, err=%v\n", r.file.Name(), errClose)
@@ -234,6 +282,12 @@ func (r *rotateWriter) check(info rotateInfo) error {
 	r.fileInfo = fileStat
 	// 更新文件描述符
 	r.file = file
+	// buf 指向新的文件
+	if r.w == nil {
+		r.w = bufio.NewWriterSize(file, r.cfg.BufSize)
+	} else {
+		r.w.Reset(file)
+	}
 	return nil
 }
 
@@ -248,22 +302,4 @@ func (r *rotateWriter) isFileExists(filename string) bool {
 		return false
 	}
 	return os.SameFile(info, r.fileInfo)
-}
-
-func WithKeepFiles(num int) Option {
-	return func(rw *RotateWriterConfig) {
-		rw.KeepFiles = num
-	}
-}
-
-func WithRule(rule string) Option {
-	return func(rw *RotateWriterConfig) {
-		rw.Rule = rule
-	}
-}
-
-func WithCheckSpan(span time.Duration) Option {
-	return func(rw *RotateWriterConfig) {
-		rw.CheckSpan = span
-	}
 }

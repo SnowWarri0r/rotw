@@ -11,6 +11,8 @@ func Benchmark_main(t *testing.B) {
 		KeepFiles: 2,
 		LogPath:   "log/test.log",
 		Rule:      "1min",
+		CheckSpan: time.Second,
+		BufSize:   1024,
 	}
 	rw, err := NewRotateWriter(rwo)
 	if err != nil {
@@ -33,6 +35,7 @@ func Test_classic(t *testing.T) {
 		LogPath:   "log/test.log",
 		Rule:      "1min",
 		CheckSpan: time.Second,
+		BufSize:   1024,
 	}
 	rw, err := NewRotateWriter(rwo)
 	if err != nil {
@@ -54,7 +57,13 @@ func Test_classic(t *testing.T) {
 }
 
 func Test_optional(t *testing.T) {
-	rw, err := NewRotateWriterWithOpt("log/test.log", WithKeepFiles(2), WithRule("1min"), WithCheckSpan(time.Second))
+	rw, err := NewRotateWriterWithOpt(
+		"log/test.log",
+		WithKeepFiles(2),
+		WithRule("1min"),
+		WithCheckSpan(time.Second),
+		WithBufSize(1024),
+	)
 	if err != nil {
 		t.Fatalf(">> %v\n", err)
 	}
