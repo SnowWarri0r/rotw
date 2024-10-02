@@ -40,6 +40,8 @@ func main() {
 		Rule: "1min",
 		// check file opened span
 		CheckSpan: time.Second,
+		// write buffer size
+		BufSize: 4096,
 	}
 	// create a rotate writer
 	rw, err := rotw.NewRotateWriter(rwo)
@@ -76,7 +78,13 @@ import (
 
 func main() {
 	// create a rotate writer
-	rw, err := rotw.NewRotateWriterWithOpt("log/test.log", rotw.WithRule("1min"), rotw.WithKeepFiles(2), rotw.WithCheckSpan(time.Second))
+	rw, err := rotw.NewRotateWriterWithOpt(
+		"log/test.log",
+		rotw.WithRule("1min"),
+		rotw.WithKeepFiles(2),
+		rotw.WithCheckSpan(time.Second),
+		rotw.WithBufSize(4096),
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -94,4 +102,5 @@ func main() {
 		time.Sleep(time.Second)
 	}
 }
+
 ```
